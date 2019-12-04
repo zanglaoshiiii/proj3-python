@@ -150,7 +150,7 @@ def isCrashed():
     return is_crashed
 
 def tester_getversion(filename):
-    return log[filename][0]
+    return log[1][filename][0]
 
 
 def requestVote(cl):
@@ -412,7 +412,7 @@ if __name__ == "__main__":
     server.register_function(crash,"surfstore.crash")
     server.register_function(restore,"surfstore.restore")
     server.register_function(isCrashed,"surfstore.isCrashed")
-
+    server.register_function(tester_getversion,"surfstore.tester_getversion")
     server.register_function(voteHandler,"voteHandler")
     server.register_function(appendEntryHandler, "appendEntryHandler")
     # server.register_function()
