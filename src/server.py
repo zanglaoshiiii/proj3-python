@@ -146,7 +146,7 @@ def requestVote():
             print("one vote fail")
 
     print("vote count:"+str(count))
-    if count>int(total_server_num/2):
+    if count>int(total_server_num/2)+1:
             mutex=True
             currentstate="leader"
             if timer is not None:
