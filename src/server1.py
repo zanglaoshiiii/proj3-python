@@ -148,28 +148,30 @@ def isCrashed():
     return is_crashed
 
 
-def requestVote(cl):
+def requestVote(client):
     global vote_counter
     global current_term
     global state
-
-    last_log_index = len(log) - 1
-    last_log_term = log[-1][0]
-    # print("current_term",current_term)
+    # try:
+    if not log:
+        last_log_index = 0
+        last_log_term = 0
+    else:
+        last_log_index = len(log)
+        last_log_term = log[-1][0]
     try:
-        vote_response = cl.voteHandler(current_term, idx, last_log_index, last_log_term )
-        # print("vote_response",vote_response)
-        # print("vote requested from: ", cl)
+        vote_response = client.voteHandler(current_term, idx, last_log_index, last_log_term )
+        print("vote requeted")
         if vote_response[0]: # [true, current term]
             vote_counter +=1
         else:
             if vote_response[1]>current_term:
                 current_term = vote_response[1]
                 state = 2
-            pass
             
     except (ConnectionRefusedError):
         pass
+        # print("ConnectionRefusedError")
 
 def voteHandler(cand_term, cand_id, cand_last_log_index, cand_last_log_term):
     global timer
@@ -182,23 +184,29 @@ def voteHandler(cand_term, cand_id, cand_last_log_index, cand_last_log_term):
         voted_for = cand_id
         current_term = cand_term
         state = 2
-        print("casting vote to", cand_id)
+        print("casting vote")
         return [True, current_term]
 
-    if cand_term < current_term:
-        return [False, current_term]
+    if not log:
+        last_log_index = 0
+        last_log_term = 0
     else:
-        last_log_index = len(log)-1
+        last_log_index = len(log)
         last_log_term = log[-1][0]
-        print("last_log_term", last_log_term)
+    
+    print("last_log_term", last_log_term)
 
+    if current_term < cand_term:
         if cand_last_log_index > last_log_index:
             return castVote()
         elif cand_last_log_index == last_log_index \
                 and cand_last_log_term == last_log_term:
             return castVote()
         else:
-            return [False, current_term]    
+            return [False, current_term] 
+    else:
+        print("Sorry no voting")
+        return [False, current_term]    
 
 
 def appendEntries(cl):
@@ -207,56 +215,58 @@ def appendEntries(cl):
     global prev_log_index
     global state
     global current_term
-    global success
-    global prev_log_term
 
+    # print("@@@@@@@@@@@@@@@@@")
+    # print(next_index)
+    # print("@@@@@@@@@@@@@@@@@@")
     try:
-        if new_leader:
-            next_index[cl] = len(log)
-        prev_log_index[cl] = next_index[cl]-1
-        prev_log_term[cl] = log[prev_log_index[cl]][0]
-            
-        if success[cl] and prev_log_index[cl]== len(log)-1:
-            print("it's a success")
+        prev_log_index = 0
+        if log:
+            if next_index[cl][1] == False:
+                entries = []
+            else: #matched  True
+                entries = log[next_index[cl][0]-1:len(log)]
+                match_index[cl] = prev_log_index
+                next_index[cl][0] = len(log)  
+            if next_index[cl][0] > 0:
+                prev_log_index = next_index[cl][0] - 1
+                prev_log_term = log[prev_log_index][0]        
+        else:
             entries =[]
-            print("hearbeat to ",cl)
-        elif success[cl] and prev_log_index[cl] != len(log)-1 :
-            entries = log[prev_log_index[cl]:-1]
-        else: # not success, last entries didn't match until next entry reaches at a point
-            entries =[]
+            prev_log_index = 0
+            prev_log_term= 0
 
         leader_commit = commit_index
-        follower_term, success[cl] = cl.appendEntryHandler(current_term, idx, prev_log_index[cl],\
-                                prev_log_term[cl], entries, leader_commit)
-        #success True if follower[next_index] matches any entry in leader or it has just been appended
-
+        follower_term, success = cl.appendEntryHandler(current_term, idx, prev_log_index,\
+                                prev_log_term, entries, leader_commit)
+        #success True if follower[next_index] matches any entry in leader
         if follower_term > current_term:
             state = 2
             current_term = follower_term
 
-        if success[cl]:
-            match_index[cl] = prev_log_index[cl]
-            next_index[cl] = prev_log_index[cl]+1
-        else:
-            if next_index[cl] > 0:
-                next_index[cl] -= 1
+        next_index[cl][1] = success
+        if not success:
+            if next_index[cl][0] > 0:
+                next_index[cl][0] -= 1
 
         print(log)
-    except (ConnectionRefusedError): 
+    except (ConnectionRefusedError):
+    # Exception as e: # if some server not alive
+        # print("in except for " + str(client))       
         pass
+
+    # self.timer.reset()
+    # client = xmlrpc.client.ServerProxy("http://" + server_info[voter_id])
+    # client.heartbeatHandler(self.id, self.currentTerm)
 
 def appendEntryHandler(leader_term, leader_id, prev_log_index,\
                         prev_log_term, entries, leader_commit):
-    print("log",log)
-    print("receiving entries",entries)
+    print(log)
 
     global timer
     global current_term
     global state
     global commit_index
-
-    if leader_term < current_term:
-        return current_term, False
 
     def appendLog():
         print("in appendLog")
@@ -267,22 +277,31 @@ def appendEntryHandler(leader_term, leader_id, prev_log_index,\
             else:
                 log.append(entries[i])
 
-    state = 2  #*** maybe
-    current_term = leader_term
+    state = 2
+    success = False
+    print("received heartbeat by: " + str(leader_id)+" in term " + str(leader_term))
+    if current_term > leader_term:
+        return current_term, success
+    else:
+        current_term = leader_term
+    
     print("my term: ", current_term)
     timer.reset()
-
-    if log[prev_log_index][0] != prev_log_term:  #*** maybe
-        return current_term, False
-
-    if entries != []:
+    if entries == []:
+        if log:
+            if prev_log_index < len(log):
+                if log[prev_log_index] == prev_log_term:
+                    success = True
+        elif len(log) == 0 and prev_log_index == 0:
+            # print("no log")
+            success = True
+    else:
         appendLog()
-
-    if leader_commit > commit_index:
-        commit_index = min(leader_commit, len(log)-1)
-
         
-    return current_term, True 
+    if leader_commit > commit_index:
+            commit_index = min(leader_commit, len(log))
+        
+    return current_term, success 
 
 def raftHandler():
     global current_term
@@ -292,9 +311,6 @@ def raftHandler():
     global new_leader
     global next_index
     global match_index
-    global success
-    global prev_log_index
-    global prev_log_term
 
     timer = timerClass()
     timer.reset()
@@ -319,28 +335,23 @@ def raftHandler():
                     print("I am the leader in term: " + str(current_term) +", votes: " + str(vote_counter))
                     # immediately send hearbeat here somehow
         else: # leader
-            timer.setTimeout(300)
+            timer.setTimeout(700)  #*** can so timer.set_timeout(1000)
             if timer.now() > timer.timeout:
                 timer.reset()
                 th12_list= []
                 if new_leader:
                     next_index ={}
                     match_index = {}
-                    success={}
-                    prev_log_index = {}
-                    prev_log_term = {}
                     for cl in client_list:
-                        next_index[cl] = len(log) # [initialize]
+                    # print("before appendEntries")
+                        next_index[cl] = [len(log), False] # [initialize, success]
                         match_index[cl] = 0
-                        success[cl] = False
-
 
                 for cl in client_list:
                     th12_list.append(threading.Thread(target = appendEntries, args=(cl, )))
                     th12_list[-1].start()
                 for t in th12_list:
                     t.join()
-                commit_index = min([match_index[cl] for cl in client_list]) #*** to be implemented
                 new_leader = False
 
 
@@ -369,7 +380,8 @@ if __name__ == "__main__":
     is_crashed = False
     current_term = 1
     voted_for = None
-    log = [[0,0]] # [[term,data]]
+    log = [] # [[term,data]]
+    prev_log_index = 0
     new_leader = False
     commit_index = 0
     last_applied = 0
