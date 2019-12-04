@@ -89,7 +89,7 @@ def getfileinfomap():
 # Update a file's fileinfo entry
 def updatefile(filename, version, hashlist):
     """Updates a file's fileinfo entry"""
-    if is_crashed:
+    if is_crashed or state!=0:
         raise Exception('Crashed')
     global log
     # ******* add log entries
@@ -108,6 +108,18 @@ def updatefile(filename, version, hashlist):
     # else:
     #     #new file (version should be 1)
     #     FileInfoMap[filename] = tuple((version, hashlist))
+    return True
+
+def apply(log_index):
+    filename, version, hashlist = log[log_index][1]
+    if filename in FileInfoMap.keys():
+        last_version = FileInfoMap[filename]
+        if (version == last_version[0]+1):
+            FileInfoMap[filename] = tuple((version, hashlist))
+        else:
+            return False
+    else:
+        FileInfoMap[filename] = tuple((version, hashlist))
     return True
 
 # PROJECT 3 APIs below
@@ -149,9 +161,12 @@ def isCrashed():
     print("IsCrashed()")
     return is_crashed
 
-def tester_getversion(filename):
-    return log[1][filename][0]
-
+def getVersion(filename):
+    "gets version number of file from server"
+    if filename not in FileInfoMap.keys():
+        return -1
+    return FileInfoMap[filename][0]
+    
 
 def requestVote(cl):
     global vote_counter
@@ -306,6 +321,8 @@ def raftHandler():
     global success
     global prev_log_index
     global prev_log_term
+    global commit_index
+    global last_applied
 
     timer = timerClass()
     timer.reset()
@@ -313,6 +330,9 @@ def raftHandler():
         if is_crashed:
             state = 2
             continue
+        if commit_index > last_applied:
+            if apply(last_applied+1):
+                last_applied += 1
         if state !=0:
             if timer.now() > timer.timeout:
                 state = 1  # candidate
@@ -355,8 +375,17 @@ def raftHandler():
                     th12_list[-1].start()
                 for t in th12_list:
                     t.join()
-                commit_index = min([match_index[cl] for cl in client_list]) #*** to be implemented
+                #commit_index = min([match_index[cl] for cl in client_list]) #*** to be implemented
                 new_leader = False
+
+                if len(log)-1 > commit_index:
+                    commit_count = 1
+                    for cl in client_list:
+                        if cl in match_index.keys() and match_index[cl]>commit_index:
+                            commit_count += 1
+                    if commit_count > (num_servers/2):
+                        commit_index += 1
+                    print("Leader commit index: ", commit_index)
 
 
 if __name__ == "__main__":
@@ -389,6 +418,7 @@ if __name__ == "__main__":
     new_leader = False
     commit_index = 0
     last_applied = 0
+    match_index = {}
 
     print("Attempting to start XML-RPC Server at "+ address+":"+str(port))
     server = threadedXMLRPCServer((address, port), requestHandler=RequestHandler)
@@ -412,7 +442,8 @@ if __name__ == "__main__":
     server.register_function(crash,"surfstore.crash")
     server.register_function(restore,"surfstore.restore")
     server.register_function(isCrashed,"surfstore.isCrashed")
-    server.register_function(tester_getversion,"surfstore.tester_getversion")
+    server.register_function(getVersion, "surfstore.tester_getversion")
+
     server.register_function(voteHandler,"voteHandler")
     server.register_function(appendEntryHandler, "appendEntryHandler")
     # server.register_function()
