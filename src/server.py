@@ -1,7 +1,7 @@
 from xmlrpc.server import SimpleXMLRPCServer
 from xmlrpc.server import SimpleXMLRPCRequestHandler
 from socketserver import ThreadingMixIn
-from MyTimer import MyTimer
+
 import argparse
 import hashlib
 import xmlrpc.client
@@ -9,6 +9,7 @@ import random
 import time
 import threading
 
+BlockStore = {}
 FileInfoMap = {}
 
 class RequestHandler(SimpleXMLRPCRequestHandler):
@@ -330,7 +331,7 @@ def raftHandler():
     global commit_index
     global last_applied
 
-    timer = MyTimer()
+    timer = timerClass()
     timer.reset()
     while True:
         while is_crashed:
