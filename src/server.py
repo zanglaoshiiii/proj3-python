@@ -18,29 +18,6 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
 class threadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
     pass
 
-# class timerClass():
-#     '''Timer'''
-#     def __init__(self):
-#         self.t_a = 300
-#         self.t_b = 500
-#         self.start = int(time.time()*1000)
-#         self.timeout = random.randint(self.t_a,self.t_b)
-
-#     def currentTime(self):
-#         return int(time.time()*1000) - self.start
-
-#     def reset(self):
-#         self.start = int(time.time()*1000)
-#         self.timeout = random.randint(self.t_a,self.t_b)
-
-#     def setTimeout(self, reset_time = None):
-#         if reset_time != None:
-#             self.timeout = reset_time
-#         else:
-#             self.timeout = random.randint(self.t_a,self.t_b)
-
-
-
 # A simple ping, returns true
 def ping():
     """A simple ping method"""
@@ -84,26 +61,19 @@ def updatefile(filename, version, hashlist):
     if is_crashed:
         raise Exception('Crashed')
     if state!=0:
-        raise Exception('not Leader')
+        raise Exception('I am not Leader')
     global log
-    # ******* add log entries
-    # log.append([current_term, ]) # check with others for their commits
-    last_index = len(log)
+
+    
     log.append([current_term, [filename, version, hashlist]])
-    #print(log)
+    last_index = len(log) - 1
 
-    # ********block if majority down****
-
-    # wait until committed?
-    # time.sleep(2)
+    # block
     while commit_index <last_index:
         pass
-    # time.sleep(2)
-    # if commit_index>=last_index:
-    print("file Updated")
+
     return True
-    # print("file not updated") 
-    # return False
+
 
 def apply(log_index):
     filename, version, hashlist = log[log_index][1]
@@ -159,8 +129,7 @@ def isCrashed():
 
 def getVersion(filename):
     "gets version number of file from server"
-    if filename not in fileinfomap.keys():
-        return 0
+    
     return fileinfomap[filename][0]
     
 
