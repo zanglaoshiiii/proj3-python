@@ -420,7 +420,7 @@ if __name__ == "__main__":
     # port = int(port)
     # print(port)
 
-    num_servers = len(serverList)
+    num_servers = len(serverList) + 1
     state = 2   # 0: Leader; 1: Candidate; 2: Follower
     is_crashed = False
     current_term = 1
