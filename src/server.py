@@ -145,7 +145,7 @@ def requestVote(cl):
     last_log_term = log[-1][0]
     # print("current_term",current_term)
     try:
-        vote_response = cl.voteHandler(current_term, idx, last_log_index, last_log_term )
+        vote_response = cl.voteHandler(current_term, servernum, last_log_index, last_log_term )
         # print("vote_response",vote_response)
         # print("vote requested from: ", cl)
         if vote_response[0]: # [true, current term]
@@ -217,7 +217,7 @@ def appendEntries(cl):
             #print("try again, next index: ",next_index[cl])
 
         leader_commit = commit_index
-        follower_term, success[cl] = cl.appendEntryHandler(current_term, idx, prev_log_index[cl],\
+        follower_term, success[cl] = cl.appendEntryHandler(current_term, servernum, prev_log_index[cl],\
                                 prev_log_term[cl], entries, leader_commit)
         #success True if follower[next_index] matches any entry in leader or it has just been appended
 
@@ -309,7 +309,7 @@ def raftHandler():
                 vote_counter += 1 # vote for self
                 timer.reset()
                 th11_list = []
-                for cl in client_list:
+                for cl in serverList:
                     th11_list.append(threading.Thread(target = requestVote, args=(cl, )))
                     th11_list[-1].start()
                 for t in th11_list:
@@ -332,52 +332,95 @@ def raftHandler():
                     success={}
                     prev_log_index = {}
                     prev_log_term = {}
-                    for cl in client_list:
+                    for cl in serverList:
                         next_index[cl] = len(log) # [initialize]
                         match_index[cl] = 0
                         success[cl] = False
 
 
-                for cl in client_list:
+                for cl in serverList:
                     th12_list.append(threading.Thread(target = appendEntries, args=(cl, )))
                     th12_list[-1].start()
                 for t in th12_list:
                     t.join()
-                #commit_index = min([match_index[cl] for cl in client_list]) #*** to be implemented
+                #commit_index = min([match_index[cl] for cl in serverList]) #*** to be implemented
                 new_leader = False
 
                 if len(log)-1 > commit_index:
                     commit_count = 1
-                    for cl in client_list:
+                    for cl in serverList:
                         if cl in match_index.keys() and match_index[cl]>commit_index:
                             commit_count += 1
                     if commit_count > (num_servers/2) and log[commit_index+1][0]==current_term:
                         commit_index += 1
                     print("Leader commit index: ", commit_index)
 
+# Reads the config file and return host, port and store list of other servers
+def readconfig(config, servernum):
+    """Reads cofig file"""
+    fd = open(config, 'r')
+    l = fd.readline()
+
+    maxnum = int(l.strip().split(' ')[1])
+
+    if servernum >= maxnum or servernum < 0:
+        raise Exception('Server number out of range.')
+
+    d = fd.read()
+    d = d.splitlines()
+
+    for i in range(len(d)):
+        hostport = d[i].strip().split(' ')[1]
+        if i == servernum:
+            host = hostport.split(':')[0]
+            port = int(hostport.split(':')[1])
+
+        else:
+            serverlist.append(hostport)
+
+
+    return maxnum, host, port
+
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="SurfStore server")
-    parser.add_argument('config_file', help='path to config file')
-    parser.add_argument('idx', help='server id')
+    # parser.add_argument('config_file', help='path to config file')
+    # parser.add_argument('servernum', help='server id')
+    parser.add_argument('config', help='path to config file')
+    parser.add_argument('servernum', type=int, help='server number')
+
     args = parser.parse_args()
 
-    config_file = args.config_file
-    idx = int(args.idx)
+    config = args.config
+    servernum = args.servernum
+    
+    # server list has list of other servers
+    serverlist = []
+    
+    # maxnum is maximum number of servers
+    maxnum, host, port = readconfig(config, servernum)
 
-    server_info = {}
+    serverList = []
+    for s in serverlist:
+        if s != servernum:
+            serverList.append(xmlrpc.client.ServerProxy("http://" + s))
 
-    with open(config_file,'r') as file:
-        next(file)
-        for line in file:
-            server_info[int(line.split(' ')[0][-2])] = line.strip().split(' ')[1]
+    # config_file = args.config_file
+    # servernum = int(args.servernum)
 
-    address, port = server_info[idx].split(':')
-    port = int(port)
-    print(port)
+    # server_info = {}
 
-    num_servers = len(server_info)
+    # with open(config_file,'r') as file:
+    #     next(file)
+    #     for line in file:
+    #         server_info[int(line.split(' ')[0][-2])] = line.strip().split(' ')[1]
+
+    # address, port = server_info[servernum].split(':')
+    # port = int(port)
+    # print(port)
+
+    num_servers = len(serverList)
     state = 2   # 0: Leader; 1: Candidate; 2: Follower
     is_crashed = False
     current_term = 1
@@ -388,15 +431,15 @@ if __name__ == "__main__":
     last_applied = 0
     match_index = {}
 
-    print("Attempting to start XML-RPC Server at "+ address+":"+str(port))
-    server = threadedXMLRPCServer((address, port), requestHandler=RequestHandler)
+    # print("Attempting to start XML-RPC Server at "+ address+":"+str(port))
+    server = threadedXMLRPCServer((host, port), requestHandler=RequestHandler)
     # th1 = threading.Thread(target = raftThread)
     
-    client_list = []
-    for i in server_info.keys():
-        if i!=idx:
-            cl = xmlrpc.client.ServerProxy("http://"+server_info[i])
-            client_list.append(cl)
+    # serverList = []
+    # for i in server_info.keys():
+    #     if i!=servernum:
+    #         cl = xmlrpc.client.ServerProxy("http://"+server_info[i])
+    #         serverList.append(cl)
 
     server.register_introspection_functions()
     server.register_function(ping,"surfstore.ping")
