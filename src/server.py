@@ -56,31 +56,32 @@ def getfileinfomap():
 # Update a file's fileinfo entry
 def updatefile(filename, version, hashlist):
     """Updates a file's fileinfo entry"""
-    if isCrash or state != 0:
+    if isCrash or status != 0:
         raise Exception('exception')
     global log
-    
-    log.append([current_term, [filename, version, hashlist]])
+
+    log.append([currentTerm, [filename, version, hashlist]])
     lastIndex = len(log) - 1
 
     # block
     while commitIndex < lastIndex:
-        pass
+        continue
 
     return True
 
 
-def apply(log_index):
-    filename, version, hashlist = log[log_index][1]
+def apply(index):
+    filename, version, hashlist = log[index][1]
     if filename in fileinfomap.keys():
-        last_version = fileinfomap[filename]
-        if (version == last_version[0]+1):
-            fileinfomap[filename] = tuple((version, hashlist))
+        latest_version = fileinfomap[filename][0]
+        if (version == latest_version + 1):
+            fileinfomap[filename] = [version, hashlist]
+            return True
         else:
             return False
     else:
-        fileinfomap[filename] = tuple((version, hashlist))
-    return True
+        fileinfomap[filename] = [version, hashlist]
+        return True
 
 # PROJECT 3 APIs below
 
@@ -89,9 +90,10 @@ def apply(log_index):
 def isLeader():
     """Is this metadata store a leader?"""
     print("IsLeader()")
-    if state == 0:
+    if status == 0:
         return True
-    return False
+    else:
+        return False
 
 # "Crashes" this metadata store
 # Until Restore() is called, the server should reply to all RPCs
@@ -130,25 +132,25 @@ def getVersion(filename):
 
 def requestVote(cl):
     global vote_counter
-    global current_term
-    global state
+    global currentTerm
+    global status
 
     if isCrash:
         raise Exception('Crashed')
     
     last_log_index = len(log) - 1
     last_log_term = log[-1][0]
-    # print("current_term",current_term)
+    # print("currentTerm",currentTerm)
     try:
-        vote_response = cl.voteHandler(current_term, servernum, last_log_index, last_log_term )
+        vote_response = cl.voteHandler(currentTerm, servernum, last_log_index, last_log_term )
         # print("vote_response",vote_response)
         # print("vote requested from: ", cl)
         if vote_response[0]: # [true, current term]
             vote_counter +=1
         else:
-            if vote_response[1]>current_term:
-                current_term = vote_response[1]
-                state = 2
+            if vote_response[1]>currentTerm:
+                currentTerm = vote_response[1]
+                status = 2
             pass
             
     except Exception as e:
@@ -163,16 +165,16 @@ def voteHandler(cand_term, cand_id, cand_last_log_index, cand_last_log_term):
 
     def castVote():
         global voted_for
-        global current_term
-        global state
+        global currentTerm
+        global status
         voted_for = cand_id
-        current_term = cand_term
-        state = 2
+        currentTerm = cand_term
+        status = 2
         print("casting vote to", cand_id)
-        return [True, current_term]
+        return [True, currentTerm]
 
-    if cand_term <= current_term:
-        return [False, current_term]
+    if cand_term <= currentTerm:
+        return [False, currentTerm]
     else:
         last_log_index = len(log)-1
         last_log_term = log[-1][0]
@@ -184,15 +186,15 @@ def voteHandler(cand_term, cand_id, cand_last_log_index, cand_last_log_term):
                 and cand_last_log_term == last_log_term:
             return castVote()
         else:
-            return [False, current_term]    
+            return [False, currentTerm]    
 
 
 def appendEntries(cl):
     global next_index
     global match_index
     global prev_log_index
-    global state
-    global current_term
+    global status
+    global currentTerm
     global success
     global prev_log_term
 
@@ -212,13 +214,13 @@ def appendEntries(cl):
             #print("try again, next index: ",next_index[cl])
 
         leader_commit = commitIndex
-        follower_term, success[cl] = cl.appendEntryHandler(current_term, servernum, prev_log_index[cl],\
+        follower_term, success[cl] = cl.appendEntryHandler(currentTerm, servernum, prev_log_index[cl],\
                                 prev_log_term[cl], entries, leader_commit)
         #success True if follower[next_index] matches any entry in leader or it has just been appended
 
-        if follower_term > current_term:
-            state = 2
-            current_term = follower_term
+        if follower_term > currentTerm:
+            status = 2
+            currentTerm = follower_term
 
         if success[cl]:
             if len(entries)>0: prev_log_index[cl] += len(entries)-1
@@ -239,12 +241,12 @@ def appendEntryHandler(leader_term, leader_id, prev_log_index,\
         raise Exception('Crashed')
 
     global timer
-    global current_term
-    global state
+    global currentTerm
+    global status
     global commitIndex
 
-    if leader_term < current_term:
-        return current_term, False
+    if leader_term < currentTerm:
+        return currentTerm, False
 
     def appendLog():
         print("in appendLog")
@@ -255,14 +257,14 @@ def appendEntryHandler(leader_term, leader_id, prev_log_index,\
             else:
                 log.append(entries[i])
 
-    state = 2  #*** maybe
-    current_term = leader_term
+    status = 2  #*** maybe
+    currentTerm = leader_term
     timer.reset()
-    print("hearbeat from "+ str(leader_id)+" in term: "+str(current_term))
+    print("hearbeat from "+ str(leader_id)+" in term: "+str(currentTerm))
     print("received entries:", entries)
 
     if len(log)-1< prev_log_index or log[prev_log_index][0] != prev_log_term:  #*** maybe
-        return current_term, False
+        return currentTerm, False
 
     if entries != []:
         appendLog()
@@ -271,11 +273,11 @@ def appendEntryHandler(leader_term, leader_id, prev_log_index,\
         commitIndex = min(leader_commit, len(log)-1)
 
         
-    return current_term, True 
+    return currentTerm, True 
 
 def raftHandler():
-    global current_term
-    global state
+    global currentTerm
+    global status
     global vote_counter
     global timer
     global new_leader
@@ -291,15 +293,15 @@ def raftHandler():
     timer.reset()
     while True:
         while isCrash:
-            state = 2
+            status = 2
             pass
         if commitIndex > last_applied:
             if apply(last_applied+1):
                 last_applied += 1
-        if state !=0:
+        if status !=0:
             if timer.currentTime() > timer.timeout:
-                state = 1  # candidate
-                current_term +=1
+                status = 1  # candidate
+                currentTerm +=1
                 vote_counter = 0 #initialized
                 vote_counter += 1 # vote for self
                 timer.reset()
@@ -311,9 +313,9 @@ def raftHandler():
                     t.join()
                 #print(vote_counter)
                 if vote_counter > (num_servers/2):
-                    state = 0 #leader elected
+                    status = 0 #leader elected
                     new_leader = True
-                    print("I am the leader in term: " + str(current_term) +", votes: " + str(vote_counter))
+                    print("I am the leader in term: " + str(currentTerm) +", votes: " + str(vote_counter))
                     print(log)
                     # immediately send hearbeat here somehow
         else: # leader
@@ -346,7 +348,7 @@ def raftHandler():
                     for cl in serverList:
                         if cl in match_index.keys() and match_index[cl]>commitIndex:
                             commit_count += 1
-                    if commit_count > (num_servers/2) and log[commitIndex+1][0]==current_term:
+                    if commit_count > (num_servers/2) and log[commitIndex+1][0]==currentTerm:
                         commitIndex += 1
                     print("Leader commit index: ", commitIndex)
 
@@ -416,9 +418,9 @@ if __name__ == "__main__":
     # print(port)
 
     num_servers = len(serverList) + 1
-    state = 2   # 0: Leader; 1: Candidate; 2: Follower
+    status = 2   # 0: Leader; 1: Candidate; 2: Follower
     isCrash = False
-    current_term = 1
+    currentTerm = 1
     voted_for = None
     log = [[0,0]] # [[term,data]]
     new_leader = False
