@@ -124,27 +124,27 @@ def isCrashed():
     print("IsCrashed()")
     return isCrash
 
-def getVersion(filename):
+def tester_getversion(filename):
     "gets version number of file from server"
     
     return fileinfomap[filename][0]
     
 
 def requestVote(cl):
+    if isCrash:
+        raise Exception('Crashed')
+    
     global vote_counter
     global currentTerm
     global status
 
-    if isCrash:
-        raise Exception('Crashed')
+
     
     last_log_index = len(log) - 1
-    last_log_term = log[-1][0]
-    # print("currentTerm",currentTerm)
+    last_log_term = log[last_log_index][0]
     try:
         vote_response = cl.voteHandler(currentTerm, servernum, last_log_index, last_log_term )
-        # print("vote_response",vote_response)
-        # print("vote requested from: ", cl)
+
         if vote_response[0]: # [true, current term]
             vote_counter +=1
         else:
@@ -153,21 +153,25 @@ def requestVote(cl):
                 status = 2
             pass
             
-    except Exception as e:
-        #print(e)
+    except Exception:
         pass
 
 def voteHandler(cand_term, cand_id, cand_last_log_index, cand_last_log_term):
     if isCrash:
         raise Exception('Crashed')
+
     global timer
+    global voteFor
+    global currentTerm
+    global status
+
     timer.reset()
 
     def castVote():
-        global voted_for
+        global voteFor
         global currentTerm
         global status
-        voted_for = cand_id
+        voteFor = cand_id
         currentTerm = cand_term
         status = 2
         print("casting vote to", cand_id)
@@ -181,17 +185,23 @@ def voteHandler(cand_term, cand_id, cand_last_log_index, cand_last_log_term):
         print("last_log_term", last_log_term)
 
         if cand_last_log_index > last_log_index:
-            return castVote()
+            voteFor = cand_id
+            currentTerm = cand_term
+            status = 2
+            return [True, currentTerm]
         elif cand_last_log_index == last_log_index \
                 and cand_last_log_term == last_log_term:
-            return castVote()
+            voteFor = cand_id
+            currentTerm = cand_term
+            status = 2
+            return [True, currentTerm]
         else:
             return [False, currentTerm]    
 
 
 def appendEntries(cl):
     global next_index
-    global match_index
+    global matchIndex
     global prev_log_index
     global status
     global currentTerm
@@ -199,7 +209,7 @@ def appendEntries(cl):
     global prev_log_term
 
     try:
-        if new_leader:
+        if newLeader:
             next_index[cl] = len(log)
         prev_log_index[cl] = next_index[cl]-1
         prev_log_term[cl] = log[prev_log_index[cl]][0]
@@ -224,7 +234,7 @@ def appendEntries(cl):
 
         if success[cl]:
             if len(entries)>0: prev_log_index[cl] += len(entries)-1
-            match_index[cl] = prev_log_index[cl]
+            matchIndex[cl] = prev_log_index[cl]
             next_index[cl] = prev_log_index[cl]+1
         else:
             if next_index[cl] > 0:
@@ -280,9 +290,9 @@ def raftHandler():
     global status
     global vote_counter
     global timer
-    global new_leader
+    global newLeader
     global next_index
-    global match_index
+    global matchIndex
     global success
     global prev_log_index
     global prev_log_term
@@ -312,9 +322,9 @@ def raftHandler():
                 for t in th11_list:
                     t.join()
                 #print(vote_counter)
-                if vote_counter > (num_servers/2):
+                if vote_counter > (numServers/2):
                     status = 0 #leader elected
-                    new_leader = True
+                    newLeader = True
                     print("I am the leader in term: " + str(currentTerm) +", votes: " + str(vote_counter))
                     print(log)
                     # immediately send hearbeat here somehow
@@ -323,15 +333,15 @@ def raftHandler():
             if timer.currentTime() > timer.timeout:
                 timer.reset()
                 th12_list= []
-                if new_leader:
+                if newLeader:
                     next_index ={}
-                    match_index = {}
+                    matchIndex = {}
                     success={}
                     prev_log_index = {}
                     prev_log_term = {}
                     for cl in serverList:
                         next_index[cl] = len(log) # [initialize]
-                        match_index[cl] = 0
+                        matchIndex[cl] = 0
                         success[cl] = False
 
 
@@ -340,15 +350,15 @@ def raftHandler():
                     th12_list[-1].start()
                 for t in th12_list:
                     t.join()
-                #commitIndex = min([match_index[cl] for cl in serverList]) #*** to be implemented
-                new_leader = False
+                #commitIndex = min([matchIndex[cl] for cl in serverList]) #*** to be implemented
+                newLeader = False
 
                 if len(log)-1 > commitIndex:
                     commit_count = 1
                     for cl in serverList:
-                        if cl in match_index.keys() and match_index[cl]>commitIndex:
+                        if cl in matchIndex.keys() and matchIndex[cl]>commitIndex:
                             commit_count += 1
-                    if commit_count > (num_servers/2) and log[commitIndex+1][0]==currentTerm:
+                    if commit_count > (numServers/2) and log[commitIndex+1][0]==currentTerm:
                         commitIndex += 1
                     print("Leader commit index: ", commitIndex)
 
@@ -403,40 +413,20 @@ if __name__ == "__main__":
         if s != servernum:
             serverList.append(xmlrpc.client.ServerProxy("http://" + s))
 
-    # config_file = args.config_file
-    # servernum = int(args.servernum)
 
-    # server_info = {}
-
-    # with open(config_file,'r') as file:
-    #     next(file)
-    #     for line in file:
-    #         server_info[int(line.split(' ')[0][-2])] = line.strip().split(' ')[1]
-
-    # address, port = server_info[servernum].split(':')
-    # port = int(port)
-    # print(port)
-
-    num_servers = len(serverList) + 1
+    numServers = len(serverList) + 1
     status = 2   # 0: Leader; 1: Candidate; 2: Follower
     isCrash = False
     currentTerm = 1
-    voted_for = None
-    log = [[0,0]] # [[term,data]]
-    new_leader = False
+    voteFor = None
+    log = [] # [[term,data]]
+    newLeader = False
     commitIndex = 0
     last_applied = 0
-    match_index = {}
+    matchIndex = {}
 
-    # print("Attempting to start XML-RPC Server at "+ address+":"+str(port))
     server = threadedXMLRPCServer((host, port), requestHandler=RequestHandler)
-    # th1 = threading.Thread(target = raftThread)
-    
-    # serverList = []
-    # for i in server_info.keys():
-    #     if i!=servernum:
-    #         cl = xmlrpc.client.ServerProxy("http://"+server_info[i])
-    #         serverList.append(cl)
+
 
     server.register_introspection_functions()
     server.register_function(ping,"surfstore.ping")
@@ -450,7 +440,7 @@ if __name__ == "__main__":
     server.register_function(crash,"surfstore.crash")
     server.register_function(restore,"surfstore.restore")
     server.register_function(isCrashed,"surfstore.isCrashed")
-    server.register_function(getVersion, "surfstore.tester_getversion")
+    server.register_function(tester_getversion, "surfstore.tester_getversion")
 
     server.register_function(voteHandler,"voteHandler")
     server.register_function(appendEntryHandler, "appendEntryHandler")
