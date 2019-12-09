@@ -75,8 +75,8 @@ def updatefile(filename, version, hashlist):
 def apply(index):
     filename, version, hashlist = log[index][1]
     if filename in fileinfomap.keys():
-        last_version = fileinfomap[filename]
-        if (version == last_version[0] + 1):
+        lastestVersion = fileinfomap[filename]
+        if (version == lastestVersion[0] + 1):
             fileinfomap[filename] = [version, hashlist]
         else:
             return False
@@ -131,7 +131,7 @@ def tester_getVersion(filename):
     return fileinfomap[filename][0]
     
 
-def requestVote(cl):
+def requestVote(sv):
     global voteCount
     global currentTerm
     global status
@@ -143,13 +143,13 @@ def requestVote(cl):
     lastLogTerm = log[-1][0]
 
     try:
-        vote_response = cl.voteHandler(currentTerm, servernum, lastLogIndex, lastLogTerm )
+        voteResponse = sv.voteHandler(currentTerm, servernum, lastLogIndex, lastLogTerm )
 
-        if vote_response[0]: 
+        if voteResponse[0]: 
             voteCount +=1
         else:
-            if vote_response[1]>currentTerm:
-                currentTerm = vote_response[1]
+            if voteResponse[1]>currentTerm:
+                currentTerm = voteResponse[1]
                 status = 2
             pass
             
@@ -164,10 +164,10 @@ def voteHandler(cand_term, cand_id, cand_lastLogIndex, cand_lastLogTerm):
     timer.reset()
 
     def castVote():
-        global voted_for
+        global voteFor
         global currentTerm
         global status
-        voted_for = cand_id
+        voteFor = cand_id
         currentTerm = cand_term
         status = 2
         print("casting vote to", cand_id)
@@ -189,7 +189,7 @@ def voteHandler(cand_term, cand_id, cand_lastLogIndex, cand_lastLogTerm):
             return [False, currentTerm]    
 
 
-def appendEntries(cl):
+def appendEntries(sv):
     global nextIndex
     global matchIndex
     global prevLogIndex
@@ -199,35 +199,35 @@ def appendEntries(cl):
     global prevLogTerm
 
     try:
-        if new_leader:
-            nextIndex[cl] = len(log)
-        prevLogIndex[cl] = nextIndex[cl]-1
-        prevLogTerm[cl] = log[prevLogIndex[cl]][0]
+        if newLeader:
+            nextIndex[sv] = len(log)
+        prevLogIndex[sv] = nextIndex[sv]-1
+        prevLogTerm[sv] = log[prevLogIndex[sv]][0]
             
-        if success[cl] and prevLogIndex[cl]== len(log)-1:
+        if success[sv] and prevLogIndex[sv]== len(log)-1:
 
             entries =[]
-        elif success[cl] and prevLogIndex[cl] != len(log)-1 :
-            entries = log[prevLogIndex[cl]:len(log)]
+        elif success[sv] and prevLogIndex[sv] != len(log)-1 :
+            entries = log[prevLogIndex[sv]:len(log)]
         else:
             entries =[]
 
 
         leader_commit = commitIndex
-        follower_term, success[cl] = cl.appendEntryHandler(currentTerm, servernum, prevLogIndex[cl],\
-                                prevLogTerm[cl], entries, leader_commit)
+        follower_term, success[sv] = sv.appendEntryHandler(currentTerm, servernum, prevLogIndex[sv],\
+                                prevLogTerm[sv], entries, leader_commit)
 
         if follower_term > currentTerm:
             status = 2
             currentTerm = follower_term
 
-        if success[cl]:
-            if len(entries)>0: prevLogIndex[cl] += len(entries)-1
-            matchIndex[cl] = prevLogIndex[cl]
-            nextIndex[cl] = prevLogIndex[cl]+1
+        if success[sv]:
+            if len(entries)>0: prevLogIndex[sv] += len(entries)-1
+            matchIndex[sv] = prevLogIndex[sv]
+            nextIndex[sv] = prevLogIndex[sv]+1
         else:
-            if nextIndex[cl] > 0:
-                nextIndex[cl] -= 1
+            if nextIndex[sv] > 0:
+                nextIndex[sv] -= 1
 
     except Exception as e: 
 
@@ -262,31 +262,31 @@ def appendEntryHandler(leader_term, leader_id, prevLogIndex,\
     print("hearbeat from "+ str(leader_id)+" in term: "+str(currentTerm))
     print("received entries:", entries)
 
-    if len(log)-1< prevLogIndex or log[prevLogIndex][0] != prevLogTerm:
+    if len(log) - 1 < prevLogIndex or log[prevLogIndex][0] != prevLogTerm:
         return currentTerm, False
 
     if entries != []:
         appendLog()
 
     if leader_commit > commitIndex:
-        commitIndex = min(leader_commit, len(log)-1)
+        commitIndex = min(leader_commit, len(log) - 1)
 
         
     return currentTerm, True 
 
-def raftHandler():
+def lifecycle():
     global currentTerm
     global status
     global voteCount
     global timer
-    global new_leader
+    global newLeader
     global nextIndex
     global matchIndex
     global success
     global prevLogIndex
     global prevLogTerm
     global commitIndex
-    global last_applied
+    global lastApplied
 
     timer = MyTimer()
     timer.reset()
@@ -294,9 +294,9 @@ def raftHandler():
         while isCrash:
             status = 2
             pass
-        if commitIndex > last_applied:
-            if apply(last_applied+1):
-                last_applied += 1
+        if commitIndex > lastApplied:
+            if apply(lastApplied+1):
+                lastApplied += 1
         if status !=0:
             if timer.currentTime() > timer.timeout:
                 status = 1  
@@ -304,16 +304,16 @@ def raftHandler():
                 voteCount = 0 
                 voteCount += 1 
                 timer.reset()
-                th11_list = []
-                for cl in serverList:
-                    th11_list.append(threading.Thread(target = requestVote, args=(cl, )))
-                    th11_list[-1].start()
-                for t in th11_list:
+                notleader_th_list = []
+                for sv in serverList:
+                    notleader_th_list.append(threading.Thread(target = requestVote, args=(sv, )))
+                    notleader_th_list[-1].start()
+                for t in notleader_th_list:
                     t.join()
 
-                if voteCount > (num_servers/2):
+                if voteCount > (numServers/2):
                     status = 0 
-                    new_leader = True
+                    newLeader = True
                     print("I am the leader in term: " + str(currentTerm) +", votes: " + str(voteCount))
                     print(log)
 
@@ -321,32 +321,32 @@ def raftHandler():
             timer.setTimeout(100)
             if timer.currentTime() > timer.timeout:
                 timer.reset()
-                th12_list= []
-                if new_leader:
+                leader_th_list= []
+                if newLeader:
                     nextIndex ={}
                     matchIndex = {}
                     success={}
                     prevLogIndex = {}
                     prevLogTerm = {}
-                    for cl in serverList:
-                        nextIndex[cl] = len(log) 
-                        success[cl] = False
+                    for sv in serverList:
+                        nextIndex[sv] = len(log) 
+                        success[sv] = False
 
 
-                for cl in serverList:
-                    th12_list.append(threading.Thread(target = appendEntries, args=(cl, )))
-                    th12_list[-1].start()
-                for t in th12_list:
+                for sv in serverList:
+                    leader_th_list.append(threading.Thread(target = appendEntries, args=(sv, )))
+                    leader_th_list[-1].start()
+                for t in leader_th_list:
                     t.join()
 
-                new_leader = False
+                newLeader = False
 
                 if len(log)-1 > commitIndex:
-                    commit_count = 1
-                    for cl in serverList:
-                        if cl in matchIndex.keys() and matchIndex[cl]>commitIndex:
-                            commit_count += 1
-                    if commit_count > (num_servers/2) and log[commitIndex+1][0]==currentTerm:
+                    commitCount = 1
+                    for sv in serverList:
+                        if sv in matchIndex.keys() and matchIndex[sv]>commitIndex:
+                            commitCount += 1
+                    if commitCount > (numServers/2) and log[commitIndex+1][0]==currentTerm:
                         commitIndex += 1
                     print("Leader commit index: ", commitIndex)
 
@@ -400,15 +400,15 @@ if __name__ == "__main__":
             serverList.append(xmlrpc.client.ServerProxy("http://" + s))
 
 
-    num_servers = len(serverList) + 1
+    numServers = len(serverList) + 1
     status = 2  
     isCrash = False
     currentTerm = 1
-    voted_for = None
+    voteFor = None
     log = [[0,0]]
-    new_leader = False
+    newLeader = False
     commitIndex = 0
-    last_applied = 0
+    lastApplied = 0
     matchIndex = {}
 
 
@@ -437,7 +437,7 @@ if __name__ == "__main__":
     print("Started successfully.")
     print("Accepting requests. (Halt program to stop.)")
 
-    th1 = threading.Thread(target = raftHandler, )
+    th1 = threading.Thread(target = lifecycle, )
     th1.start()
 
     server.serve_forever()
