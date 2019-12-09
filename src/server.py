@@ -52,16 +52,15 @@ def getfileinfomap():
     # print("Getfileinfomap()")
     
 
-    result = fileinfomap
-    return result
+    
+    return fileinfomap
 
 # Update a file's fileinfo entry
 def updatefile(filename, version, hashlist):
     """Updates a file's fileinfo entry"""
-    if is_crashed:
-        raise Exception('Crashed')
-    if state!=0:
-        raise Exception('I am not Leader')
+    if isCrash or status != 0:
+        raise Exception('Exception')
+
     global log
 
     
@@ -94,7 +93,7 @@ def apply(log_index):
 def isLeader():
     """Is this metadata store a leader?"""
     print("IsLeader()")
-    if state == 0:
+    if status == 0:
         return True
     return False
 
@@ -104,18 +103,18 @@ def isLeader():
 # RPCs to other servers
 def crash():
     """Crashes this metadata store"""
-    global is_crashed
+    global isCrash
     print("Crash()")
-    is_crashed = True
+    isCrash = True
     return True
 
 # "Restores" this metadata store, allowing it to start responding
 # to and sending RPCs to other nodes
 def restore():
     """Restores this metadata store"""
-    global is_crashed
+    global isCrash
     print("Restore()")
-    is_crashed = False
+    isCrash = False
     timer.reset()
     return True
 
@@ -125,7 +124,7 @@ def restore():
 def isCrashed():
     """Returns whether this node is crashed or not"""
     print("IsCrashed()")
-    return is_crashed
+    return isCrash
 
 def getVersion(filename):
     "gets version number of file from server"
@@ -136,9 +135,9 @@ def getVersion(filename):
 def requestVote(cl):
     global vote_counter
     global current_term
-    global state
+    global status
 
-    if is_crashed:
+    if isCrash:
         raise Exception('Crashed')
     
     last_log_index = len(log) - 1
@@ -153,7 +152,7 @@ def requestVote(cl):
         else:
             if vote_response[1]>current_term:
                 current_term = vote_response[1]
-                state = 2
+                status = 2
             pass
             
     except Exception as e:
@@ -161,7 +160,7 @@ def requestVote(cl):
         pass
 
 def voteHandler(cand_term, cand_id, cand_last_log_index, cand_last_log_term):
-    if is_crashed:
+    if isCrash:
         raise Exception('Crashed')
     global timer
     timer.reset()
@@ -169,10 +168,10 @@ def voteHandler(cand_term, cand_id, cand_last_log_index, cand_last_log_term):
     def castVote():
         global voted_for
         global current_term
-        global state
+        global status
         voted_for = cand_id
         current_term = cand_term
-        state = 2
+        status = 2
         print("casting vote to", cand_id)
         return [True, current_term]
 
@@ -196,7 +195,7 @@ def appendEntries(cl):
     global next_index
     global match_index
     global prev_log_index
-    global state
+    global status
     global current_term
     global success
     global prev_log_term
@@ -222,7 +221,7 @@ def appendEntries(cl):
         #success True if follower[next_index] matches any entry in leader or it has just been appended
 
         if follower_term > current_term:
-            state = 2
+            status = 2
             current_term = follower_term
 
         if success[cl]:
@@ -240,12 +239,12 @@ def appendEntries(cl):
 def appendEntryHandler(leader_term, leader_id, prev_log_index,\
                         prev_log_term, entries, leader_commit):
     #print("log",log)
-    if is_crashed:
+    if isCrash:
         raise Exception('Crashed')
 
     global timer
     global current_term
-    global state
+    global status
     global commit_index
 
     if leader_term < current_term:
@@ -260,7 +259,7 @@ def appendEntryHandler(leader_term, leader_id, prev_log_index,\
             else:
                 log.append(entries[i])
 
-    state = 2  #*** maybe
+    status = 2  #*** maybe
     current_term = leader_term
     timer.reset()
     print("hearbeat from "+ str(leader_id)+" in term: "+str(current_term))
@@ -280,7 +279,7 @@ def appendEntryHandler(leader_term, leader_id, prev_log_index,\
 
 def raftHandler():
     global current_term
-    global state
+    global status
     global vote_counter
     global timer
     global new_leader
@@ -295,15 +294,15 @@ def raftHandler():
     timer = MyTimer()
     timer.reset()
     while True:
-        while is_crashed:
-            state = 2
+        while isCrash:
+            status = 2
             pass
         if commit_index > last_applied:
             if apply(last_applied+1):
                 last_applied += 1
-        if state !=0:
+        if status !=0:
             if timer.currentTime() > timer.timeout:
-                state = 1  # candidate
+                status = 1  # candidate
                 current_term +=1
                 vote_counter = 0 #initialized
                 vote_counter += 1 # vote for self
@@ -316,7 +315,7 @@ def raftHandler():
                     t.join()
                 #print(vote_counter)
                 if vote_counter > (num_servers/2):
-                    state = 0 #leader elected
+                    status = 0 #leader elected
                     new_leader = True
                     print("I am the leader in term: " + str(current_term) +", votes: " + str(vote_counter))
                     print(log)
@@ -421,8 +420,8 @@ if __name__ == "__main__":
     # print(port)
 
     num_servers = len(serverList) + 1
-    state = 2   # 0: Leader; 1: Candidate; 2: Follower
-    is_crashed = False
+    status = 2   # 0: Leader; 1: Candidate; 2: Follower
+    isCrash = False
     current_term = 1
     voted_for = None
     log = [[0,0]] # [[term,data]]
