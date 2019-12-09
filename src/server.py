@@ -62,11 +62,11 @@ def updatefile(filename, version, hashlist):
     global log
 
     
-    log.append([current_term, [filename, version, hashlist]])
-    last_index = len(log) - 1
+    log.append([currentTerm, [filename, version, hashlist]])
+    lastIndex = len(log) - 1
 
     # block
-    while commit_index <last_index:
+    while commitIndex < lastIndex:
         pass
 
     return True
@@ -132,32 +132,32 @@ def tester_getVersion(filename):
     
 
 def requestVote(cl):
-    global vote_counter
-    global current_term
+    global voteCount
+    global currentTerm
     global status
 
     if isCrash:
         raise Exception('Crashed')
     
-    last_log_index = len(log) - 1
-    last_log_term = log[-1][0]
+    lastLogIndex = len(log) - 1
+    lastLogTerm = log[-1][0]
 
     try:
-        vote_response = cl.voteHandler(current_term, servernum, last_log_index, last_log_term )
+        vote_response = cl.voteHandler(currentTerm, servernum, lastLogIndex, lastLogTerm )
 
         if vote_response[0]: 
-            vote_counter +=1
+            voteCount +=1
         else:
-            if vote_response[1]>current_term:
-                current_term = vote_response[1]
+            if vote_response[1]>currentTerm:
+                currentTerm = vote_response[1]
                 status = 2
             pass
             
     except Exception as e:
-        #print(e)
+
         pass
 
-def voteHandler(cand_term, cand_id, cand_last_log_index, cand_last_log_term):
+def voteHandler(cand_term, cand_id, cand_lastLogIndex, cand_lastLogTerm):
     if isCrash:
         raise Exception('Crashed')
     global timer
@@ -165,127 +165,127 @@ def voteHandler(cand_term, cand_id, cand_last_log_index, cand_last_log_term):
 
     def castVote():
         global voted_for
-        global current_term
+        global currentTerm
         global status
         voted_for = cand_id
-        current_term = cand_term
+        currentTerm = cand_term
         status = 2
         print("casting vote to", cand_id)
-        return [True, current_term]
+        return [True, currentTerm]
 
-    if cand_term <= current_term:
-        return [False, current_term]
+    if cand_term <= currentTerm:
+        return [False, currentTerm]
     else:
-        last_log_index = len(log)-1
-        last_log_term = log[-1][0]
-        print("last_log_term", last_log_term)
+        lastLogIndex = len(log)-1
+        lastLogTerm = log[-1][0]
+        print("lastLogTerm", lastLogTerm)
 
-        if cand_last_log_index > last_log_index:
+        if cand_lastLogIndex > lastLogIndex:
             return castVote()
-        elif cand_last_log_index == last_log_index \
-                and cand_last_log_term == last_log_term:
+        elif cand_lastLogIndex == lastLogIndex \
+                and cand_lastLogTerm == lastLogTerm:
             return castVote()
         else:
-            return [False, current_term]    
+            return [False, currentTerm]    
 
 
 def appendEntries(cl):
-    global next_index
-    global match_index
-    global prev_log_index
+    global nextIndex
+    global matchIndex
+    global prevLogIndex
     global status
-    global current_term
+    global currentTerm
     global success
-    global prev_log_term
+    global prevLogTerm
 
     try:
         if new_leader:
-            next_index[cl] = len(log)
-        prev_log_index[cl] = next_index[cl]-1
-        prev_log_term[cl] = log[prev_log_index[cl]][0]
+            nextIndex[cl] = len(log)
+        prevLogIndex[cl] = nextIndex[cl]-1
+        prevLogTerm[cl] = log[prevLogIndex[cl]][0]
             
-        if success[cl] and prev_log_index[cl]== len(log)-1:
+        if success[cl] and prevLogIndex[cl]== len(log)-1:
 
             entries =[]
-        elif success[cl] and prev_log_index[cl] != len(log)-1 :
-            entries = log[prev_log_index[cl]:len(log)]
+        elif success[cl] and prevLogIndex[cl] != len(log)-1 :
+            entries = log[prevLogIndex[cl]:len(log)]
         else:
             entries =[]
 
 
-        leader_commit = commit_index
-        follower_term, success[cl] = cl.appendEntryHandler(current_term, servernum, prev_log_index[cl],\
-                                prev_log_term[cl], entries, leader_commit)
+        leader_commit = commitIndex
+        follower_term, success[cl] = cl.appendEntryHandler(currentTerm, servernum, prevLogIndex[cl],\
+                                prevLogTerm[cl], entries, leader_commit)
 
-        if follower_term > current_term:
+        if follower_term > currentTerm:
             status = 2
-            current_term = follower_term
+            currentTerm = follower_term
 
         if success[cl]:
-            if len(entries)>0: prev_log_index[cl] += len(entries)-1
-            match_index[cl] = prev_log_index[cl]
-            next_index[cl] = prev_log_index[cl]+1
+            if len(entries)>0: prevLogIndex[cl] += len(entries)-1
+            matchIndex[cl] = prevLogIndex[cl]
+            nextIndex[cl] = prevLogIndex[cl]+1
         else:
-            if next_index[cl] > 0:
-                next_index[cl] -= 1
+            if nextIndex[cl] > 0:
+                nextIndex[cl] -= 1
 
     except Exception as e: 
 
         pass
 
-def appendEntryHandler(leader_term, leader_id, prev_log_index,\
-                        prev_log_term, entries, leader_commit):
+def appendEntryHandler(leader_term, leader_id, prevLogIndex,\
+                        prevLogTerm, entries, leader_commit):
 
     if isCrash:
         raise Exception('Crashed')
 
     global timer
-    global current_term
+    global currentTerm
     global status
-    global commit_index
+    global commitIndex
 
-    if leader_term < current_term:
-        return current_term, False
+    if leader_term < currentTerm:
+        return currentTerm, False
 
     def appendLog():
         print("in appendLog")
-        print(prev_log_index, prev_log_index + len(entries))
-        for i,j in enumerate(range(prev_log_index, prev_log_index + len(entries))):
+        print(prevLogIndex, prevLogIndex + len(entries))
+        for i,j in enumerate(range(prevLogIndex, prevLogIndex + len(entries))):
             if j < len(log):
                 log[j] = entries[i]
             else:
                 log.append(entries[i])
 
     status = 2
-    current_term = leader_term
+    currentTerm = leader_term
     timer.reset()
-    print("hearbeat from "+ str(leader_id)+" in term: "+str(current_term))
+    print("hearbeat from "+ str(leader_id)+" in term: "+str(currentTerm))
     print("received entries:", entries)
 
-    if len(log)-1< prev_log_index or log[prev_log_index][0] != prev_log_term:
-        return current_term, False
+    if len(log)-1< prevLogIndex or log[prevLogIndex][0] != prevLogTerm:
+        return currentTerm, False
 
     if entries != []:
         appendLog()
 
-    if leader_commit > commit_index:
-        commit_index = min(leader_commit, len(log)-1)
+    if leader_commit > commitIndex:
+        commitIndex = min(leader_commit, len(log)-1)
 
         
-    return current_term, True 
+    return currentTerm, True 
 
 def raftHandler():
-    global current_term
+    global currentTerm
     global status
-    global vote_counter
+    global voteCount
     global timer
     global new_leader
-    global next_index
-    global match_index
+    global nextIndex
+    global matchIndex
     global success
-    global prev_log_index
-    global prev_log_term
-    global commit_index
+    global prevLogIndex
+    global prevLogTerm
+    global commitIndex
     global last_applied
 
     timer = MyTimer()
@@ -294,15 +294,15 @@ def raftHandler():
         while isCrash:
             status = 2
             pass
-        if commit_index > last_applied:
+        if commitIndex > last_applied:
             if apply(last_applied+1):
                 last_applied += 1
         if status !=0:
             if timer.currentTime() > timer.timeout:
                 status = 1  
-                current_term +=1
-                vote_counter = 0 
-                vote_counter += 1 
+                currentTerm +=1
+                voteCount = 0 
+                voteCount += 1 
                 timer.reset()
                 th11_list = []
                 for cl in serverList:
@@ -311,10 +311,10 @@ def raftHandler():
                 for t in th11_list:
                     t.join()
 
-                if vote_counter > (num_servers/2):
+                if voteCount > (num_servers/2):
                     status = 0 
                     new_leader = True
-                    print("I am the leader in term: " + str(current_term) +", votes: " + str(vote_counter))
+                    print("I am the leader in term: " + str(currentTerm) +", votes: " + str(voteCount))
                     print(log)
 
         else: 
@@ -323,13 +323,13 @@ def raftHandler():
                 timer.reset()
                 th12_list= []
                 if new_leader:
-                    next_index ={}
-                    match_index = {}
+                    nextIndex ={}
+                    matchIndex = {}
                     success={}
-                    prev_log_index = {}
-                    prev_log_term = {}
+                    prevLogIndex = {}
+                    prevLogTerm = {}
                     for cl in serverList:
-                        next_index[cl] = len(log) 
+                        nextIndex[cl] = len(log) 
                         success[cl] = False
 
 
@@ -341,14 +341,14 @@ def raftHandler():
 
                 new_leader = False
 
-                if len(log)-1 > commit_index:
+                if len(log)-1 > commitIndex:
                     commit_count = 1
                     for cl in serverList:
-                        if cl in match_index.keys() and match_index[cl]>commit_index:
+                        if cl in matchIndex.keys() and matchIndex[cl]>commitIndex:
                             commit_count += 1
-                    if commit_count > (num_servers/2) and log[commit_index+1][0]==current_term:
-                        commit_index += 1
-                    print("Leader commit index: ", commit_index)
+                    if commit_count > (num_servers/2) and log[commitIndex+1][0]==currentTerm:
+                        commitIndex += 1
+                    print("Leader commit index: ", commitIndex)
 
 # Reads the config file and return host, port and store list of other servers
 def readconfig(config, servernum):
@@ -403,13 +403,13 @@ if __name__ == "__main__":
     num_servers = len(serverList) + 1
     status = 2  
     isCrash = False
-    current_term = 1
+    currentTerm = 1
     voted_for = None
     log = [[0,0]]
     new_leader = False
-    commit_index = 0
+    commitIndex = 0
     last_applied = 0
-    match_index = {}
+    matchIndex = {}
 
 
     server = threadedXMLRPCServer((host, port), requestHandler=RequestHandler)
