@@ -49,8 +49,6 @@ def hasblocks(hashlist):
 # Retrieves the server's fileinfomap
 def getfileinfomap():
     """Gets the fileinfo map"""
-    # print("Getfileinfomap()")
-    
 
     
     return fileinfomap
@@ -74,16 +72,16 @@ def updatefile(filename, version, hashlist):
     return True
 
 
-def apply(log_index):
-    filename, version, hashlist = log[log_index][1]
+def apply(index):
+    filename, version, hashlist = log[index][1]
     if filename in fileinfomap.keys():
         last_version = fileinfomap[filename]
-        if (version == last_version[0]+1):
-            fileinfomap[filename] = tuple((version, hashlist))
+        if (version == last_version[0] + 1):
+            fileinfomap[filename] = [version, hashlist]
         else:
             return False
     else:
-        fileinfomap[filename] = tuple((version, hashlist))
+        fileinfomap[filename] = [version, hashlist]
     return True
 
 # PROJECT 3 APIs below
@@ -95,7 +93,8 @@ def isLeader():
     print("IsLeader()")
     if status == 0:
         return True
-    return False
+    else:
+        return False
 
 # "Crashes" this metadata store
 # Until Restore() is called, the server should reply to all RPCs
@@ -126,7 +125,7 @@ def isCrashed():
     print("IsCrashed()")
     return isCrash
 
-def getVersion(filename):
+def tester_getVersion(filename):
     "gets version number of file from server"
     
     return fileinfomap[filename][0]
@@ -142,12 +141,11 @@ def requestVote(cl):
     
     last_log_index = len(log) - 1
     last_log_term = log[-1][0]
-    # print("current_term",current_term)
+
     try:
         vote_response = cl.voteHandler(current_term, servernum, last_log_index, last_log_term )
-        # print("vote_response",vote_response)
-        # print("vote requested from: ", cl)
-        if vote_response[0]: # [true, current term]
+
+        if vote_response[0]: 
             vote_counter +=1
         else:
             if vote_response[1]>current_term:
@@ -207,18 +205,17 @@ def appendEntries(cl):
         prev_log_term[cl] = log[prev_log_index[cl]][0]
             
         if success[cl] and prev_log_index[cl]== len(log)-1:
-            #print("it's a success")
+
             entries =[]
         elif success[cl] and prev_log_index[cl] != len(log)-1 :
             entries = log[prev_log_index[cl]:len(log)]
-        else: # not success, last entries didn't match until next entry reaches at a point
+        else:
             entries =[]
-            #print("try again, next index: ",next_index[cl])
+
 
         leader_commit = commit_index
         follower_term, success[cl] = cl.appendEntryHandler(current_term, servernum, prev_log_index[cl],\
                                 prev_log_term[cl], entries, leader_commit)
-        #success True if follower[next_index] matches any entry in leader or it has just been appended
 
         if follower_term > current_term:
             status = 2
@@ -233,12 +230,12 @@ def appendEntries(cl):
                 next_index[cl] -= 1
 
     except Exception as e: 
-        # print("Exception in appendEntries: ", e)
+
         pass
 
 def appendEntryHandler(leader_term, leader_id, prev_log_index,\
                         prev_log_term, entries, leader_commit):
-    #print("log",log)
+
     if isCrash:
         raise Exception('Crashed')
 
@@ -259,13 +256,13 @@ def appendEntryHandler(leader_term, leader_id, prev_log_index,\
             else:
                 log.append(entries[i])
 
-    status = 2  #*** maybe
+    status = 2
     current_term = leader_term
     timer.reset()
     print("hearbeat from "+ str(leader_id)+" in term: "+str(current_term))
     print("received entries:", entries)
 
-    if len(log)-1< prev_log_index or log[prev_log_index][0] != prev_log_term:  #*** maybe
+    if len(log)-1< prev_log_index or log[prev_log_index][0] != prev_log_term:
         return current_term, False
 
     if entries != []:
@@ -302,10 +299,10 @@ def raftHandler():
                 last_applied += 1
         if status !=0:
             if timer.currentTime() > timer.timeout:
-                status = 1  # candidate
+                status = 1  
                 current_term +=1
-                vote_counter = 0 #initialized
-                vote_counter += 1 # vote for self
+                vote_counter = 0 
+                vote_counter += 1 
                 timer.reset()
                 th11_list = []
                 for cl in serverList:
@@ -313,14 +310,14 @@ def raftHandler():
                     th11_list[-1].start()
                 for t in th11_list:
                     t.join()
-                #print(vote_counter)
+
                 if vote_counter > (num_servers/2):
-                    status = 0 #leader elected
+                    status = 0 
                     new_leader = True
                     print("I am the leader in term: " + str(current_term) +", votes: " + str(vote_counter))
                     print(log)
-                    # immediately send hearbeat here somehow
-        else: # leader
+
+        else: 
             timer.setTimeout(100)
             if timer.currentTime() > timer.timeout:
                 timer.reset()
@@ -332,8 +329,7 @@ def raftHandler():
                     prev_log_index = {}
                     prev_log_term = {}
                     for cl in serverList:
-                        next_index[cl] = len(log) # [initialize]
-                        match_index[cl] = 0
+                        next_index[cl] = len(log) 
                         success[cl] = False
 
 
@@ -342,7 +338,7 @@ def raftHandler():
                     th12_list[-1].start()
                 for t in th12_list:
                     t.join()
-                #commit_index = min([match_index[cl] for cl in serverList]) #*** to be implemented
+
                 new_leader = False
 
                 if len(log)-1 > commit_index:
@@ -384,8 +380,6 @@ def readconfig(config, servernum):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="SurfStore server")
-    # parser.add_argument('config_file', help='path to config file')
-    # parser.add_argument('servernum', help='server id')
     parser.add_argument('config', help='path to config file')
     parser.add_argument('servernum', type=int, help='server number')
 
@@ -405,40 +399,22 @@ if __name__ == "__main__":
         if s != servernum:
             serverList.append(xmlrpc.client.ServerProxy("http://" + s))
 
-    # config_file = args.config_file
-    # servernum = int(args.servernum)
-
-    # server_info = {}
-
-    # with open(config_file,'r') as file:
-    #     next(file)
-    #     for line in file:
-    #         server_info[int(line.split(' ')[0][-2])] = line.strip().split(' ')[1]
-
-    # address, port = server_info[servernum].split(':')
-    # port = int(port)
-    # print(port)
 
     num_servers = len(serverList) + 1
-    status = 2   # 0: Leader; 1: Candidate; 2: Follower
+    status = 2  
     isCrash = False
     current_term = 1
     voted_for = None
-    log = [[0,0]] # [[term,data]]
+    log = [[0,0]]
     new_leader = False
     commit_index = 0
     last_applied = 0
     match_index = {}
 
-    # print("Attempting to start XML-RPC Server at "+ address+":"+str(port))
+
     server = threadedXMLRPCServer((host, port), requestHandler=RequestHandler)
-    # th1 = threading.Thread(target = raftThread)
-    
-    # serverList = []
-    # for i in server_info.keys():
-    #     if i!=servernum:
-    #         cl = xmlrpc.client.ServerProxy("http://"+server_info[i])
-    #         serverList.append(cl)
+
+
 
     server.register_introspection_functions()
     server.register_function(ping,"surfstore.ping")
@@ -452,11 +428,11 @@ if __name__ == "__main__":
     server.register_function(crash,"surfstore.crash")
     server.register_function(restore,"surfstore.restore")
     server.register_function(isCrashed,"surfstore.isCrashed")
-    server.register_function(getVersion, "surfstore.tester_getversion")
+    server.register_function(tester_getVersion, "surfstore.tester_getversion")
 
     server.register_function(voteHandler,"voteHandler")
     server.register_function(appendEntryHandler, "appendEntryHandler")
-    # server.register_function()
+
 
     print("Started successfully.")
     print("Accepting requests. (Halt program to stop.)")
