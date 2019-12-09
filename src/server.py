@@ -50,21 +50,26 @@ def hasblocks(hashlist):
 def getfileinfomap():
     """Gets the fileinfo map"""
     # print("Getfileinfomap()")
+    
 
-    return fileinfomap
+    result = fileinfomap
+    return result
 
 # Update a file's fileinfo entry
 def updatefile(filename, version, hashlist):
     """Updates a file's fileinfo entry"""
-    if isCrash or state != 0:
-        raise Exception('exception')
+    if is_crashed:
+        raise Exception('Crashed')
+    if state!=0:
+        raise Exception('I am not Leader')
     global log
+
     
     log.append([current_term, [filename, version, hashlist]])
-    lastIndex = len(log) - 1
+    last_index = len(log) - 1
 
     # block
-    while commitIndex < lastIndex:
+    while commit_index <last_index:
         pass
 
     return True
@@ -99,18 +104,18 @@ def isLeader():
 # RPCs to other servers
 def crash():
     """Crashes this metadata store"""
-    global isCrash
+    global is_crashed
     print("Crash()")
-    isCrash = True
+    is_crashed = True
     return True
 
 # "Restores" this metadata store, allowing it to start responding
 # to and sending RPCs to other nodes
 def restore():
     """Restores this metadata store"""
-    global isCrash
+    global is_crashed
     print("Restore()")
-    isCrash = False
+    is_crashed = False
     timer.reset()
     return True
 
@@ -120,7 +125,7 @@ def restore():
 def isCrashed():
     """Returns whether this node is crashed or not"""
     print("IsCrashed()")
-    return isCrash
+    return is_crashed
 
 def getVersion(filename):
     "gets version number of file from server"
@@ -133,7 +138,7 @@ def requestVote(cl):
     global current_term
     global state
 
-    if isCrash:
+    if is_crashed:
         raise Exception('Crashed')
     
     last_log_index = len(log) - 1
@@ -156,7 +161,7 @@ def requestVote(cl):
         pass
 
 def voteHandler(cand_term, cand_id, cand_last_log_index, cand_last_log_term):
-    if isCrash:
+    if is_crashed:
         raise Exception('Crashed')
     global timer
     timer.reset()
@@ -211,7 +216,7 @@ def appendEntries(cl):
             entries =[]
             #print("try again, next index: ",next_index[cl])
 
-        leader_commit = commitIndex
+        leader_commit = commit_index
         follower_term, success[cl] = cl.appendEntryHandler(current_term, servernum, prev_log_index[cl],\
                                 prev_log_term[cl], entries, leader_commit)
         #success True if follower[next_index] matches any entry in leader or it has just been appended
@@ -235,13 +240,13 @@ def appendEntries(cl):
 def appendEntryHandler(leader_term, leader_id, prev_log_index,\
                         prev_log_term, entries, leader_commit):
     #print("log",log)
-    if isCrash:
+    if is_crashed:
         raise Exception('Crashed')
 
     global timer
     global current_term
     global state
-    global commitIndex
+    global commit_index
 
     if leader_term < current_term:
         return current_term, False
@@ -267,8 +272,8 @@ def appendEntryHandler(leader_term, leader_id, prev_log_index,\
     if entries != []:
         appendLog()
 
-    if leader_commit > commitIndex:
-        commitIndex = min(leader_commit, len(log)-1)
+    if leader_commit > commit_index:
+        commit_index = min(leader_commit, len(log)-1)
 
         
     return current_term, True 
@@ -284,16 +289,16 @@ def raftHandler():
     global success
     global prev_log_index
     global prev_log_term
-    global commitIndex
+    global commit_index
     global last_applied
 
     timer = MyTimer()
     timer.reset()
     while True:
-        while isCrash:
+        while is_crashed:
             state = 2
             pass
-        if commitIndex > last_applied:
+        if commit_index > last_applied:
             if apply(last_applied+1):
                 last_applied += 1
         if state !=0:
@@ -338,17 +343,17 @@ def raftHandler():
                     th12_list[-1].start()
                 for t in th12_list:
                     t.join()
-                #commitIndex = min([match_index[cl] for cl in serverList]) #*** to be implemented
+                #commit_index = min([match_index[cl] for cl in serverList]) #*** to be implemented
                 new_leader = False
 
-                if len(log)-1 > commitIndex:
+                if len(log)-1 > commit_index:
                     commit_count = 1
                     for cl in serverList:
-                        if cl in match_index.keys() and match_index[cl]>commitIndex:
+                        if cl in match_index.keys() and match_index[cl]>commit_index:
                             commit_count += 1
-                    if commit_count > (num_servers/2) and log[commitIndex+1][0]==current_term:
-                        commitIndex += 1
-                    print("Leader commit index: ", commitIndex)
+                    if commit_count > (num_servers/2) and log[commit_index+1][0]==current_term:
+                        commit_index += 1
+                    print("Leader commit index: ", commit_index)
 
 # Reads the config file and return host, port and store list of other servers
 def readconfig(config, servernum):
@@ -417,12 +422,12 @@ if __name__ == "__main__":
 
     num_servers = len(serverList) + 1
     state = 2   # 0: Leader; 1: Candidate; 2: Follower
-    isCrash = False
+    is_crashed = False
     current_term = 1
     voted_for = None
     log = [[0,0]] # [[term,data]]
     new_leader = False
-    commitIndex = 0
+    commit_index = 0
     last_applied = 0
     match_index = {}
 
